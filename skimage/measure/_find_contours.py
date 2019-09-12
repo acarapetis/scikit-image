@@ -8,7 +8,7 @@ _param_options = ('high', 'low')
 
 def find_contours(array, level,
                   fully_connected='low', positive_orientation='low',
-                  nodata=None):
+                  mask=None):
     """Find iso-valued contours in a 2D array for a given level value.
 
     Uses the "marching squares" method to compute a the iso-valued contours of
@@ -31,11 +31,8 @@ def find_contours(array, level,
          contours will wind counter- clockwise around elements below the
          iso-value. Alternately, this means that low-valued elements are always
          on the left of the contour. (See below for details.)
-    nodata : float
-        Value to treat as missing data. No contours will be drawn where *array*
-        has values equal to *nodata* (or where values are ``NaN`` if nodata is
-        ``NaN``).  Default value is ``None``, which disables this behaviour
-        entirely for backwards-compatibility.
+    mask : 2D ndarray of bool
+        If provided, no contours will be drawn where *mask* is true.
 
     Returns
     -------
@@ -64,9 +61,9 @@ def find_contours(array, level,
     with the 'fully_connected' parameter.
 
     Output contours are not guaranteed to be closed: contours which intersect
-    the array edge or a region of missing data will be left open. All other
-    contours will be closed. (The closed-ness of a contours can be tested by
-    checking whether the beginning point is the same as the end point.)
+    the array edge or a masked-off region will be left open. All other contours
+    will be closed. (The closed-ness of a contours can be tested by checking
+    whether the beginning point is the same as the end point.)
 
     Contours are oriented. By default, array values lower than the contour
     value are to the left of the contour and values greater than the contour
@@ -113,19 +110,25 @@ def find_contours(array, level,
     [array([[ 0. ,  0.5],
            [ 0.5,  0. ]])]
     """
-    array = np.asarray(array, dtype=np.double)
-    if array.ndim != 2:
+    _array = np.asarray(array, dtype=np.double)
+    if _array.ndim != 2:
         raise ValueError('Only 2D arrays are supported.')
     level = float(level)
-    if nodata is not None:
-        nodata = np.double(nodata)
+    if mask is not None:
+        mask = np.asarray(mask, dtype=bool)
+        if mask.shape != _array.shape:
+            raise ValueError('If provided, mask must have same shape as array')
+        if _array is array:
+            # we haven't already made a copy, but we need to now.
+            _array = np.copy(_array)
+        _array[~mask] = np.nan
+
     if (fully_connected not in _param_options or
        positive_orientation not in _param_options):
         raise ValueError('Parameters "fully_connected" and'
         ' "positive_orientation" must be either "high" or "low".')
-    point_list = _find_contours_cy.iterate_and_store(array, level,
-                                                     fully_connected == 'high',
-                                                     nodata=nodata)
+    point_list = _find_contours_cy.iterate_and_store(_array, level,
+                                                     fully_connected == 'high')
     contours = _assemble_contours(_take_2(point_list))
     if positive_orientation == 'high':
         contours = [c[::-1] for c in contours]
